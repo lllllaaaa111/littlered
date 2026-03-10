@@ -1,0 +1,93 @@
+# ===== 小红书自动运营 Agent 配置文件 =====
+
+# 数据库配置
+database:
+  host: "localhost"
+  port: 5432
+  name: "xiaohongshu_agent"
+  user: "postgres"
+  password: "your_password"
+  pool_size: 10
+  max_overflow: 20
+
+# Redis 配置
+redis:
+  host: "localhost"
+  port: 6379
+  db: 0
+  password: ""
+
+# Celery 配置
+celery:
+  broker_url: "redis://localhost:6379/0"
+  result_backend: "redis://localhost:6379/1"
+
+# LLM API 配置（OpenAI 兼容接口）
+llm:
+  api_key: "your_openai_api_key"
+  base_url: "https://api.openai.com/v1"
+  model: "gpt-4o"
+  max_tokens: 1024
+  temperature: 0.8
+  max_retries: 3
+
+# Stable Diffusion API 配置
+stable_diffusion:
+  api_url: "http://127.0.0.1:7860"
+  # 或使用云端 API
+  # api_url: "https://your-sd-api.com"
+  steps: 30
+  cfg_scale: 7
+  width: 1024
+  height: 1024
+  sampler_name: "DPM++ 2M Karras"
+
+# 向量数据库配置（ChromaDB）
+vector_db:
+  type: "chroma"
+  persist_directory: "./chroma_data"
+  collection_name: "style_examples"
+
+# 小红书账号配置
+xiaohongshu:
+  username: "your_username"
+  password: "your_password"
+  # Cookie 登录（推荐）
+  cookie_file: "./cookies/xhs_cookies.json"
+  # 发布间隔（秒）
+  publish_interval: 120
+
+# 内容规则
+content_rules:
+  title_max_length: 20
+  body_max_chars: 500
+  body_max_lines: 30
+  images_per_post: 4
+  image_min_resolution: 1024
+  tags_min: 3
+  tags_max: 5
+
+# 调度配置
+scheduler:
+  # 每天生成内容时间
+  generate_time: "08:00"
+  # 每天发布内容时间
+  publish_time: "09:00"
+  # 每天抓取数据时间
+  collect_time: "18:00"
+  # 每天优化策略时间
+  optimize_time: "23:00"
+  # 每天发布帖子数量
+  daily_post_count: 30
+
+# 图片存储路径
+storage:
+  image_dir: "./storage/images"
+  temp_dir: "./storage/temp"
+
+# 日志配置
+logging:
+  level: "INFO"
+  file: "./logs/agent.log"
+  rotation: "1 day"
+  retention: "30 days"
