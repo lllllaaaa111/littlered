@@ -63,32 +63,38 @@ class TopicPostGenerator:
         )
         hashtags = self.random.sample(hashtag_pool, k=min(4, len(hashtag_pool)))
 
-        title = (topic.title or "分享")[:200]
-        body = "\n".join(
-            [
-                f"先说结论：{topic.angle or '这套方法我最近一直在用，真的省时间。'}",
-                "",
-                "1）准备/前提",
-                " - 你需要：纸笔/备忘录 + 10分钟空档",
-                "",
-                "2）步骤（照做即可）",
-                " - 第一步：列出你现在最困扰的3件事（越具体越好）",
-                " - 第二步：给每件事设一个“最低完成标准”（5分钟能做完）",
-                " - 第三步：只做最小闭环，先把反馈跑出来",
-                "",
-                "3）避坑点",
-                " - 别一次性做太多，越多越容易放弃",
-                " - 先让自己“容易开始”，再优化",
-                "",
-                f"风格：{tone}",
-                "",
-                cta,
-            ]
-        )
+        title = (topic.title or “分享”)[:200]
+        lines = [
+            f”先说结论：{topic.angle or '这套方法我最近一直在用，真的省时间。'}”,
+            “1）准备/前提”,
+            “ - 你需要：纸笔/备忘录 + 10分钟空档”,
+            “2）步骤（照做即可）”,
+            “ - 第一步：列出你现在最困扰的3件事（越具体越好）”,
+            “ - 第二步：给每件事设一个”最低完成标准”（5分钟能做完）”,
+            “ - 第三步：只做最小闭环，先把反馈跑出来”,
+            “3）避坑点”,
+            “ - 别一次性做太多，越多越容易放弃”,
+            “ - 先让自己”容易开始”，再优化”,
+            f”风格：{tone}”,
+            cta,
+        ]
+        # 去掉完全空白行，限制30行以内
+        lines = [l for l in lines if l.strip()][:30]
+        body = “\n”.join(lines)
+        # 限制500字以内，截断时保持行完整
+        if len(body) > 500:
+            truncated = []
+            total = 0
+            for line in lines:
+                if total + len(line) + 1 > 500:
+                    break
+                truncated.append(line)
+                total += len(line) + 1
+            body = “\n”.join(truncated)
 
         return {
-            "title": title,
-            "body": body,
+            “title”: title,
+            “body”: body,
             "hashtags": hashtags,
             "language": "zh",
             "style": dict(self.strategy),
