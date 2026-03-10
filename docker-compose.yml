@@ -1,0 +1,4 @@
+name: xhs-ai-agent
+include:
+  - docker/docker-compose.yml
+
