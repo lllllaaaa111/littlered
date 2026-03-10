@@ -80,6 +80,17 @@ scheduler:
   # 每天发布帖子数量
   daily_post_count: 30
 
+# 图片来源配置
+image:
+  # 图片来源模式（三选一）：
+  #   stable_diffusion  调用 SD WebUI API 生成（生产默认）
+  #   local             从 local_image_dir 随机取图（测试用，跳过 SD API）
+  #   auto              优先 SD API，API 不可达时自动回退到 local
+  source: "local"
+  # 本地样例图片目录（local / auto 模式使用）
+  # 将任意 PNG/JPG 图片放入该目录即可
+  local_image_dir: "./storage/sample_images"
+
 # 图片存储路径
 storage:
   image_dir: "./storage/images"

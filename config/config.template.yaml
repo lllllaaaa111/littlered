@@ -75,6 +75,12 @@ scheduler:
   optimize_time: "${OPTIMIZE_TIME}"
   daily_post_count: ${DAILY_POST_COUNT}
 
+# 图片来源配置
+image:
+  # stable_diffusion | local | auto
+  source: "${IMAGE_SOURCE}"
+  local_image_dir: "/app/storage/sample_images"
+
 # 图片存储路径
 storage:
   image_dir: "/app/storage/images"
