@@ -19,9 +19,20 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # ── 安装系统依赖 ───────────────────────────────────────────
-# Playwright Chromium 运行时依赖 + gettext(envsubst) + pg/redis 客户端
+# 仅安装 Debian Bookworm (python:3.11-slim) 中确认存在的包：
+#
+# 移除原因：
+#   fonts-noto-cjk  → slim 镜像 apt 源中不可用（包体积 ~200MB，需要额外源）
+#   libgtk-3-0      → headless Chromium 不需要 GTK
+#   libxss1         → X11 屏保扩展，headless 不需要
+#   libxrender1     → headless 不需要
+#   libxcursor1     → 鼠标光标，headless 不需要
+#   libxi6          → X11 输入扩展，headless 不需要
+#   libxtst6        → X11 测试扩展，headless 不需要
+#
+# libasound2t64 是 Bookworm 中 libasound2 的新名称（time_t 64位迁移）
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # Playwright / Chromium 依赖
+    # Chromium headless 核心运行时依赖
     libnss3 \
     libnspr4 \
     libatk1.0-0 \
@@ -34,31 +45,28 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libfontconfig1 \
     libgbm1 \
     libglib2.0-0 \
-    libgtk-3-0 \
     libpango-1.0-0 \
+    libpangocairo-1.0-0 \
     libx11-6 \
     libx11-xcb1 \
     libxcb1 \
     libxcomposite1 \
-    libxcursor1 \
     libxdamage1 \
     libxext6 \
     libxfixes3 \
-    libxi6 \
     libxkbcommon0 \
     libxrandr2 \
-    libxrender1 \
-    libxss1 \
-    libxtst6 \
-    libasound2 \
+    libasound2t64 \
+    # 字体（基础拉丁 + 中文 fallback）
     fonts-liberation \
-    fonts-noto-cjk \
+    fonts-noto \
     # 工具
     gettext-base \
     postgresql-client \
     redis-tools \
     curl \
     wget \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # ── 安装 Python 依赖 ───────────────────────────────────────
@@ -67,8 +75,8 @@ RUN pip install --upgrade pip && \
     pip install -r requirements.txt
 
 # ── 安装 Playwright Chromium 浏览器 ──────────────────────
-RUN playwright install chromium && \
-    playwright install-deps chromium
+# 注意：不执行 playwright install-deps，系统依赖已在上方 apt-get 步骤手动安装
+RUN playwright install chromium
 
 # ── 复制应用代码 ───────────────────────────────────────────
 COPY . .
