@@ -11,7 +11,8 @@
 - [技术栈](#技术栈)
 - [项目结构](#项目结构)
 - [数据库设计](#数据库设计)
-- [快速开始](#快速开始)
+- [Docker 部署（推荐）](#docker-部署推荐)
+- [本地部署](#本地部署)
 - [配置说明](#配置说明)
 - [API 接口文档](#api-接口文档)
 - [定时任务说明](#定时任务说明)
@@ -45,6 +46,34 @@
 PostgreSQL  ←→  Redis  ←→  ChromaDB
 ```
 
+**Docker 容器拓扑：**
+
+```
+┌─────────────────────────────────────────────┐
+│              xhs_network (bridge)            │
+│                                             │
+│  ┌──────────────┐   ┌──────────────────┐   │
+│  │  xhs_agent   │   │   xhs_postgres   │   │
+│  │  (FastAPI)   │──▶│  postgres:16     │   │
+│  │  port: 8000  │   │  port: 5432      │   │
+│  └──────┬───────┘   └──────────────────┘   │
+│         │                                   │
+│         │           ┌──────────────────┐   │
+│         └──────────▶│   xhs_redis      │   │
+│                     │  redis:7         │   │
+│                     │  port: 6379      │   │
+│                     └──────────────────┘   │
+└─────────────────────────────────────────────┘
+
+Volume 挂载：
+  postgres_data  →  PostgreSQL 数据持久化
+  redis_data     →  Redis AOF 持久化
+  chroma_data    →  ChromaDB 向量索引
+  ./storage      →  生成图片（宿主机目录）
+  ./cookies      →  小红书 Cookie（宿主机目录）
+  ./logs         →  应用日志（宿主机目录）
+```
+
 ---
 
 ## 功能特性
@@ -70,13 +99,14 @@ PostgreSQL  ←→  Redis  ←→  ChromaDB
 |------|------|
 | 语言 | Python 3.11 |
 | Web 框架 | FastAPI 0.104 + Uvicorn |
-| 数据库 | PostgreSQL + SQLAlchemy 2.x（异步） |
-| 缓存/队列 | Redis 5.x + Celery |
+| 数据库 | PostgreSQL 16 + SQLAlchemy 2.x（异步） |
+| 缓存/队列 | Redis 7 + Celery |
 | 向量数据库 | ChromaDB 0.4 |
 | 任务调度 | APScheduler 3.10 |
 | LLM | OpenAI 兼容 API（gpt-4o） |
 | 图片生成 | Stable Diffusion WebUI API（A1111） |
-| 浏览器自动化 | Playwright 1.40 |
+| 浏览器自动化 | Playwright 1.40 + Chromium |
+| 容器化 | Docker + Docker Compose |
 | 图片处理 | Pillow |
 | 日志 | Loguru |
 | 重试机制 | Tenacity |
@@ -90,62 +120,58 @@ xiaohongshu/
 │
 ├── main.py                           # 主入口：FastAPI 服务 + CLI 模式
 │
+├── Dockerfile                        # 应用容器镜像构建文件
+├── docker-compose.yml                # 生产环境编排（app + postgres + redis）
+├── docker-compose.dev.yml            # 开发环境覆盖（热重载）
+├── .env.example                      # 环境变量模板（复制为 .env 后填写）
+├── .dockerignore                     # Docker 构建忽略规则
+│
+├── docker/
+│   └── entrypoint.sh                 # 容器启动脚本（等待依赖 + 渲染配置）
+│
 ├── config/
-│   └── config.yaml                   # 全局配置文件（数据库/Redis/LLM/SD/小红书账号）
+│   ├── config.yaml                   # 本地开发配置（直接编辑）
+│   └── config.template.yaml          # Docker 配置模板（含 ${VAR} 占位符）
 │
 ├── database/
-│   ├── __init__.py
 │   ├── database.py                   # 异步数据库连接池、Session 工厂
-│   ├── models.py                     # SQLAlchemy ORM 模型定义（4张表）
+│   ├── models.py                     # SQLAlchemy ORM 模型（4张表）
 │   └── repository.py                 # 数据访问层（CRUD 封装）
 │
 ├── knowledge/
-│   ├── __init__.py
 │   ├── style_repository.py           # 风格知识库管理（含内置种子数据）
 │   └── vector_store.py               # ChromaDB 向量存储与语义检索
 │
 ├── generators/
-│   ├── __init__.py
 │   ├── topic_generator.py            # 主题生成（加权随机 + 修饰词组合）
 │   ├── content_generator.py          # 文案生成（LLM API 调用 + 解析）
 │   └── prompt_templates.py           # 所有 Prompt 模板（LLM + SD）
 │
 ├── image/
-│   ├── __init__.py
 │   └── image_generator.py            # 图片生成（SD API，每篇4张）
 │
 ├── validation/
-│   ├── __init__.py
 │   └── content_validator.py          # 内容合规校验 + auto_fix 自动修复
 │
 ├── publisher/
-│   ├── __init__.py
 │   └── xiaohongshu_publisher.py      # Playwright 自动化发布
 │
 ├── analytics/
-│   ├── __init__.py
 │   ├── data_collector.py             # Playwright 数据采集（浏览/点赞/收藏/评论）
 │   └── performance_analyzer.py       # 表现评分计算与差评内容分析
 │
 ├── optimizer/
-│   ├── __init__.py
 │   └── strategy_optimizer.py         # 主题权重动态调整策略
 │
 ├── scheduler/
-│   ├── __init__.py
 │   └── daily_job.py                  # APScheduler 每日4个定时任务
 │
-├── storage/                          # 自动创建
-│   ├── images/                       # 生成图片存储目录
-│   └── temp/                         # 临时文件目录
-│
-├── cookies/                          # 自动创建
-│   └── xhs_cookies.json              # 小红书登录 Cookie（运行后自动保存）
-│
-├── chroma_data/                      # 自动创建（ChromaDB 持久化数据）
+├── storage/                          # 自动创建（图片存储）
+├── cookies/                          # 自动创建（Cookie 存储）
 ├── logs/                             # 自动创建（日志文件）
+├── chroma_data/                      # 自动创建（ChromaDB 数据，Docker Volume）
 │
-└── requirements.txt                  # 项目依赖
+└── requirements.txt                  # Python 依赖
 ```
 
 ---
@@ -204,9 +230,140 @@ xiaohongshu/
 
 ---
 
-## 快速开始
+## Docker 部署（推荐）
 
-### 1. 环境要求
+### 环境要求
+
+- Docker 24.0+
+- Docker Compose 2.20+
+- 宿主机运行 Stable Diffusion WebUI（或配置云端 SD API 地址）
+
+### 第一步：准备配置
+
+```bash
+# 复制环境变量模板
+cp .env.example .env
+```
+
+编辑 `.env`，填写必填项：
+
+```dotenv
+# 数据库密码（自定义强密码）
+POSTGRES_PASSWORD=your_strong_password
+
+# LLM API Key
+LLM_API_KEY=sk-your-openai-api-key
+
+# Stable Diffusion WebUI 地址
+# 宿主机本地：使用 host.docker.internal（Mac/Windows 自动解析宿主机 IP）
+# Linux 宿主机：使用宿主机 IP，如 http://192.168.1.100:7860
+SD_API_URL=http://host.docker.internal:7860
+
+# 小红书账号
+XHS_USERNAME=your_phone_number
+XHS_PASSWORD=your_password
+```
+
+### 第二步：构建并启动
+
+```bash
+# 构建镜像并启动所有服务（后台运行）
+docker-compose up -d --build
+
+# 查看启动日志
+docker-compose logs -f app
+```
+
+启动成功后访问：[http://localhost:8000/docs](http://localhost:8000/docs)
+
+### 第三步：查看运行状态
+
+```bash
+# 查看所有容器状态
+docker-compose ps
+
+# 实时查看应用日志
+docker-compose logs -f app
+
+# 查看系统状态 API
+curl http://localhost:8000/api/status
+```
+
+### 常用容器操作
+
+```bash
+# 停止所有服务
+docker-compose down
+
+# 停止并删除所有数据（Volume）
+docker-compose down -v
+
+# 重启应用容器
+docker-compose restart app
+
+# 进入应用容器调试
+docker-compose exec app bash
+
+# 进入 PostgreSQL 控制台
+docker-compose exec postgres psql -U postgres -d xiaohongshu_agent
+
+# 进入 Redis 控制台
+docker-compose exec redis redis-cli
+
+# 手动触发生成任务（在容器内执行）
+docker-compose exec app python main.py cli
+
+# 查看容器资源占用
+docker stats xhs_agent_app xhs_postgres xhs_redis
+```
+
+### 开发模式（热重载）
+
+```bash
+# 使用开发配置启动（代码修改自动生效）
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+
+# 查看开发模式日志
+docker-compose logs -f app
+```
+
+### 数据持久化说明
+
+| 数据类型 | 存储位置 | 说明 |
+|----------|----------|------|
+| PostgreSQL 数据 | Docker Volume `postgres_data` | 容器重建后数据保留 |
+| Redis 数据 | Docker Volume `redis_data` | AOF 持久化，重启后恢复 |
+| ChromaDB 向量索引 | Docker Volume `chroma_data` | 向量数据持久化 |
+| 生成图片 | 宿主机 `./storage/` | 直接访问图片文件 |
+| 小红书 Cookie | 宿主机 `./cookies/` | 避免重复登录 |
+| 应用日志 | 宿主机 `./logs/` | 直接查看日志文件 |
+
+### 容器启动流程
+
+```
+docker-compose up
+       │
+       ├── postgres 启动 → 健康检查通过
+       ├── redis 启动    → 健康检查通过
+       │
+       └── app 启动
+              │
+              ├── entrypoint.sh 执行
+              │      ├── 等待 PostgreSQL 就绪（最多 60 秒）
+              │      ├── 等待 Redis 就绪（最多 30 秒）
+              │      └── envsubst 渲染 config.template.yaml → config.yaml
+              │
+              └── uvicorn main:app 启动
+                     ├── 创建数据库表结构
+                     ├── 写入风格种子数据
+                     └── 启动 APScheduler 定时任务
+```
+
+---
+
+## 本地部署
+
+### 环境要求
 
 - Python 3.11+
 - PostgreSQL 14+
@@ -214,129 +371,102 @@ xiaohongshu/
 - Stable Diffusion WebUI（本地或云端，A1111 兼容）
 - 有效的 OpenAI API Key（或兼容接口）
 
-### 2. 克隆项目 & 安装依赖
+### 安装步骤
 
 ```bash
-# 安装 Python 依赖
+# 1. 安装 Python 依赖
 pip install -r requirements.txt
 
-# 安装 Playwright 浏览器驱动
+# 2. 安装 Playwright 浏览器驱动
 playwright install chromium
-```
 
-### 3. 初始化数据库
-
-```bash
-# 创建 PostgreSQL 数据库
+# 3. 创建 PostgreSQL 数据库
 psql -U postgres -c "CREATE DATABASE xiaohongshu_agent;"
-```
 
-### 4. 修改配置文件
+# 4. 修改配置文件（本地部署直接编辑 config.yaml）
+# 参考下方配置说明章节
 
-编辑 `config/config.yaml`，填写以下必填项：
-
-```yaml
-database:
-  password: "your_pg_password"        # PostgreSQL 密码
-
-llm:
-  api_key: "sk-xxxx"                  # OpenAI API Key
-  base_url: "https://api.openai.com/v1"
-  model: "gpt-4o"
-
-stable_diffusion:
-  api_url: "http://127.0.0.1:7860"    # SD WebUI 地址
-
-xiaohongshu:
-  username: "your_phone_number"       # 小红书手机号
-  password: "your_password"           # 小红书密码
-```
-
-### 5. 启动服务
-
-```bash
-# FastAPI 服务模式（推荐，自带定时调度）
+# 5. 启动服务
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
-# CLI 单次测试模式（测试5篇，调试用）
+# 或使用 CLI 模式测试（运行5篇）
 python main.py cli
 ```
-
-### 6. 访问 API 文档
-
-启动后访问：[http://localhost:8000/docs](http://localhost:8000/docs)
 
 ---
 
 ## 配置说明
 
-`config/config.yaml` 完整配置项说明：
+### Docker 部署：编辑 `.env` 文件
+
+```dotenv
+# ── PostgreSQL ───────────────────────
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=your_strong_password  # 必填：自定义强密码
+POSTGRES_DB=xiaohongshu_agent
+DB_HOST=postgres                        # 固定值（Docker 服务名）
+DB_PORT=5432
+DB_POOL_SIZE=10
+DB_MAX_OVERFLOW=20
+
+# ── Redis ────────────────────────────
+REDIS_HOST=redis                        # 固定值（Docker 服务名）
+REDIS_PORT=6379
+REDIS_DB=0
+REDIS_PASSWORD=                         # 无密码留空
+
+# ── LLM API ──────────────────────────
+LLM_API_KEY=sk-your-key                 # 必填
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_MODEL=gpt-4o
+LLM_MAX_TOKENS=1024
+LLM_TEMPERATURE=0.8
+LLM_MAX_RETRIES=3
+
+# ── Stable Diffusion ─────────────────
+SD_API_URL=http://host.docker.internal:7860  # 必填：SD WebUI 地址
+SD_STEPS=30
+SD_CFG_SCALE=7
+SD_WIDTH=1024
+SD_HEIGHT=1024
+SD_SAMPLER=DPM++ 2M Karras
+
+# ── 小红书账号 ────────────────────────
+XHS_USERNAME=your_phone                 # 必填
+XHS_PASSWORD=your_password             # 必填
+XHS_PUBLISH_INTERVAL=120               # 发布间隔（秒）
+
+# ── 定时调度 ──────────────────────────
+DAILY_POST_COUNT=30
+GENERATE_TIME=08:00
+PUBLISH_TIME=09:00
+COLLECT_TIME=18:00
+OPTIMIZE_TIME=23:00
+```
+
+### 本地部署：编辑 `config/config.yaml`
+
+参考 `config/config.template.yaml` 的结构，将所有 `${VAR}` 替换为实际值：
 
 ```yaml
-# ── 数据库 ──────────────────────────────────────────
 database:
-  host: "localhost"
+  host: "localhost"          # 本地部署使用 localhost
   port: 5432
   name: "xiaohongshu_agent"
   user: "postgres"
-  password: "your_password"       # 必填
-  pool_size: 10                   # 连接池大小
-  max_overflow: 20                # 最大溢出连接数
+  password: "your_password"  # 必填
 
-# ── Redis ────────────────────────────────────────────
-redis:
-  host: "localhost"
-  port: 6379
-  db: 0
-  password: ""                    # 无密码留空
-
-# ── LLM API（OpenAI 兼容）────────────────────────────
 llm:
-  api_key: "your_openai_api_key"  # 必填
+  api_key: "sk-xxxx"         # 必填
   base_url: "https://api.openai.com/v1"
-  model: "gpt-4o"                 # 支持任何 OpenAI 兼容模型
-  max_tokens: 1024
-  temperature: 0.8                # 创意度（0~1，越高越有创意）
-  max_retries: 3
+  model: "gpt-4o"
 
-# ── Stable Diffusion API ─────────────────────────────
 stable_diffusion:
-  api_url: "http://127.0.0.1:7860"  # 必填：SD WebUI 地址
-  steps: 30                          # 推理步数（越高质量越好，越慢）
-  cfg_scale: 7                       # 提示词引导强度
-  width: 1024                        # 图片宽度（≥1024）
-  height: 1024                       # 图片高度（≥1024）
-  sampler_name: "DPM++ 2M Karras"
+  api_url: "http://127.0.0.1:7860"  # 必填
 
-# ── 小红书账号 ────────────────────────────────────────
 xiaohongshu:
-  username: "your_username"       # 手机号
-  password: "your_password"       # 密码
-  cookie_file: "./cookies/xhs_cookies.json"  # Cookie 文件路径
-  publish_interval: 120           # 每篇发布间隔（秒），建议 ≥ 120
-
-# ── 内容规则（不建议修改）─────────────────────────────
-content_rules:
-  title_max_length: 20
-  body_max_chars: 500
-  body_max_lines: 30
-  images_per_post: 4
-  image_min_resolution: 1024
-  tags_min: 3
-  tags_max: 5
-
-# ── 定时调度 ──────────────────────────────────────────
-scheduler:
-  generate_time: "08:00"          # 生成内容时间
-  publish_time: "09:00"           # 发布内容时间
-  collect_time: "18:00"           # 采集数据时间
-  optimize_time: "23:00"          # 优化策略时间
-  daily_post_count: 30            # 每天发布数量
-
-# ── 存储路径 ──────────────────────────────────────────
-storage:
-  image_dir: "./storage/images"
-  temp_dir: "./storage/temp"
+  username: "your_phone"
+  password: "your_password"
 ```
 
 ---
@@ -360,7 +490,7 @@ storage:
 ### 请求示例
 
 ```bash
-# 触发完整 Agent 流程（原木风，生成并发布30篇）
+# 触发完整 Agent 流程
 curl -X POST http://localhost:8000/api/run-agent \
   -H "Content-Type: application/json" \
   -d '{"style_name": "原木风", "post_count": 30}'
@@ -437,9 +567,8 @@ curl "http://localhost:8000/api/topics?style_name=原木风"
 ⑥ 内容校验
    ├── 标题 ≤ 20 字
    ├── 正文 ≤ 500 字 / ≤ 30 行 / 无空白行
-   ├── 标签 3~5 个
-   ├── 图片 4 张
-   └── 不合规 → auto_fix 修复 → 重试生成（最多3次）
+   ├── 标签 3~5 个，图片 4 张
+   └── 不合规 → auto_fix → 重试生成（最多3次）
          │
 ⑦ 发布帖子（Playwright）
    ├── Cookie 登录小红书创作者中心
@@ -461,8 +590,6 @@ curl "http://localhost:8000/api/topics?style_name=原木风"
 ---
 
 ## 内容规则说明
-
-系统内置小红书平台内容规则校验，所有生成内容发布前均经过严格检查：
 
 | 规则项 | 限制 | 处理策略 |
 |--------|------|----------|
@@ -492,7 +619,7 @@ curl "http://localhost:8000/api/topics?style_name=原木风"
 
 ### generators/prompt_templates.py — Prompt 模板
 
-**LLM 文案生成 Prompt 示例输出：**
+**LLM 文案生成示例输出：**
 
 ```
 标题：
@@ -533,53 +660,69 @@ score = views × 0.2 + likes × 0.4 + favorites × 0.4
 
 **Q：首次运行需要手动登录小红书吗？**
 
-A：是的。首次运行时 Playwright 会打开浏览器等待手动登录（最多60秒）。登录成功后 Cookie 会自动保存到 `cookies/xhs_cookies.json`，后续运行自动使用 Cookie 登录，无需再次手动操作。
+A：是的。首次运行时 Playwright 会打开浏览器等待手动登录（最多60秒）。登录成功后 Cookie 自动保存到 `cookies/xhs_cookies.json`，后续自动使用 Cookie 登录。Docker 部署时 cookies 目录挂载到宿主机，重启容器不影响登录状态。
 
 ---
 
-**Q：没有本地 Stable Diffusion，怎么使用图片生成？**
+**Q：Docker 容器内如何访问宿主机的 Stable Diffusion？**
 
-A：修改 `config/config.yaml` 中的 `stable_diffusion.api_url` 为云端 SD API 地址（需兼容 A1111 接口）。也可以自行修改 `image/image_generator.py` 对接其他图片生成服务（如 DALL-E、Midjourney API 等）。
+A：Mac / Windows 系统使用 `host.docker.internal` 自动解析宿主机 IP：
+```dotenv
+SD_API_URL=http://host.docker.internal:7860
+```
+Linux 系统需要手动填写宿主机 IP：
+```dotenv
+SD_API_URL=http://192.168.1.100:7860
+```
+或在 `docker-compose.yml` 的 app 服务中添加 `extra_hosts: ["host-gateway:host-gateway"]`。
 
 ---
 
 **Q：支持国内 LLM（如 DeepSeek、Qwen）吗？**
 
-A：支持所有 OpenAI 兼容接口。修改配置即可：
+A：支持所有 OpenAI 兼容接口。修改 `.env` 即可：
 
-```yaml
-llm:
-  api_key: "your_deepseek_key"
-  base_url: "https://api.deepseek.com/v1"
-  model: "deepseek-chat"
+```dotenv
+LLM_API_KEY=your_deepseek_key
+LLM_BASE_URL=https://api.deepseek.com/v1
+LLM_MODEL=deepseek-chat
+```
+
+---
+
+**Q：如何查看/备份 PostgreSQL 数据？**
+
+```bash
+# 备份数据库
+docker-compose exec postgres pg_dump -U postgres xiaohongshu_agent > backup.sql
+
+# 恢复数据库
+docker-compose exec -T postgres psql -U postgres xiaohongshu_agent < backup.sql
 ```
 
 ---
 
 **Q：如何添加新的装修风格？**
 
-A：在 `knowledge/style_repository.py` 的 `SEED_STYLES` 列表中添加新风格数据，重启服务后自动写入数据库。或者直接调用数据库接口插入 `style_category` 和 `style_topics` 表。
+A：在 `knowledge/style_repository.py` 的 `SEED_STYLES` 列表中添加新风格数据，重启服务后自动写入数据库。或者直接向 `style_category` 和 `style_topics` 表插入数据。
 
 ---
 
-**Q：如何调整每天发布时间？**
+**Q：如何调整每天发布时间和数量？**
 
-A：修改 `config/config.yaml` 中的 scheduler 配置：
+A：修改 `.env`（Docker）或 `config/config.yaml`（本地）中的调度配置：
 
-```yaml
-scheduler:
-  generate_time: "07:00"   # 改为 7 点生成
-  publish_time: "08:30"    # 改为 8:30 发布
-  collect_time: "20:00"    # 改为 20 点采集
-  optimize_time: "22:00"   # 改为 22 点优化
-  daily_post_count: 20     # 改为每天发 20 篇
+```dotenv
+DAILY_POST_COUNT=20     # 每天发20篇
+GENERATE_TIME=07:00     # 改为7点生成
+PUBLISH_TIME=08:30      # 改为8:30发布
 ```
 
 ---
 
 **Q：Playwright 发布时找不到页面元素怎么办？**
 
-A：小红书页面结构可能随版本更新变化。请打开 `publisher/xiaohongshu_publisher.py`，根据实际页面的 HTML 结构更新 CSS 选择器。建议使用 `headless=False` 模式调试，通过浏览器开发者工具定位元素。
+A：小红书页面结构可能随版本更新变化。打开 `publisher/xiaohongshu_publisher.py` 根据实际 HTML 结构更新 CSS 选择器。本地调试时将 Dockerfile 中的 `headless=True` 改为 `headless=False`，通过浏览器开发者工具定位元素。
 
 ---
 

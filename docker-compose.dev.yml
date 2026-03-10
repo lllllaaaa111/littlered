@@ -1,0 +1,42 @@
+# ============================================================
+# 开发环境覆盖配置
+# 用法：docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+# 特性：代码热重载、详细日志、跳过健康检查等待
+# ============================================================
+
+services:
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # 开发阶段不缓存（确保代码变更生效）
+      cache_from: []
+    container_name: xhs_agent_dev
+    # 开发模式：覆盖生产启动命令，开启 --reload 热重载
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload --log-level debug
+    volumes:
+      - ./config/config.template.yaml:/app/config/config.template.yaml:ro
+      # 将整个项目目录挂载进容器，支持热重载
+      - .:/app
+      - ./storage:/app/storage
+      - ./cookies:/app/cookies
+      - ./logs:/app/logs
+      - chroma_data:/app/chroma_data
+    environment:
+      # 开发环境额外配置
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+    # 开发环境放宽健康检查
+    healthcheck:
+      interval: 60s
+      start_period: 120s
+
+  postgres:
+    # 开发环境暴露端口，方便用数据库客户端直连
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"

@@ -1,0 +1,88 @@
+# ============================================================
+# 配置模板文件 — 由 docker/entrypoint.sh 通过 envsubst 渲染
+# 本地开发：直接编辑 config/config.yaml
+# Docker 部署：填写 .env 文件，启动时自动生成 config.yaml
+# ============================================================
+
+# 数据库配置
+database:
+  host: "${DB_HOST}"
+  port: ${DB_PORT}
+  name: "${POSTGRES_DB}"
+  user: "${POSTGRES_USER}"
+  password: "${POSTGRES_PASSWORD}"
+  pool_size: ${DB_POOL_SIZE}
+  max_overflow: ${DB_MAX_OVERFLOW}
+
+# Redis 配置
+redis:
+  host: "${REDIS_HOST}"
+  port: ${REDIS_PORT}
+  db: ${REDIS_DB}
+  password: "${REDIS_PASSWORD}"
+
+# Celery 配置
+celery:
+  broker_url: "redis://${REDIS_HOST}:${REDIS_PORT}/0"
+  result_backend: "redis://${REDIS_HOST}:${REDIS_PORT}/1"
+
+# LLM API 配置（OpenAI 兼容接口）
+llm:
+  api_key: "${LLM_API_KEY}"
+  base_url: "${LLM_BASE_URL}"
+  model: "${LLM_MODEL}"
+  max_tokens: ${LLM_MAX_TOKENS}
+  temperature: ${LLM_TEMPERATURE}
+  max_retries: ${LLM_MAX_RETRIES}
+
+# Stable Diffusion API 配置
+stable_diffusion:
+  api_url: "${SD_API_URL}"
+  steps: ${SD_STEPS}
+  cfg_scale: ${SD_CFG_SCALE}
+  width: ${SD_WIDTH}
+  height: ${SD_HEIGHT}
+  sampler_name: "${SD_SAMPLER}"
+
+# 向量数据库配置（ChromaDB）
+vector_db:
+  type: "chroma"
+  persist_directory: "/app/chroma_data"
+  collection_name: "style_examples"
+
+# 小红书账号配置
+xiaohongshu:
+  username: "${XHS_USERNAME}"
+  password: "${XHS_PASSWORD}"
+  cookie_file: "/app/cookies/xhs_cookies.json"
+  publish_interval: ${XHS_PUBLISH_INTERVAL}
+
+# 内容规则
+content_rules:
+  title_max_length: 20
+  body_max_chars: 500
+  body_max_lines: 30
+  images_per_post: 4
+  image_min_resolution: 1024
+  tags_min: 3
+  tags_max: 5
+
+# 调度配置
+scheduler:
+  generate_time: "${GENERATE_TIME}"
+  publish_time: "${PUBLISH_TIME}"
+  collect_time: "${COLLECT_TIME}"
+  optimize_time: "${OPTIMIZE_TIME}"
+  daily_post_count: ${DAILY_POST_COUNT}
+
+# 图片存储路径
+storage:
+  image_dir: "/app/storage/images"
+  temp_dir: "/app/storage/temp"
+
+# 日志配置
+logging:
+  level: "INFO"
+  file: "/app/logs/agent.log"
+  rotation: "1 day"
+  retention: "30 days"
